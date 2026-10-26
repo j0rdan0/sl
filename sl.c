@@ -97,6 +97,12 @@ int main(int argc, char *argv[])
     leaveok(stdscr, TRUE);
     scrollok(stdscr, FALSE);
 
+    if (has_colors()) {
+        start_color();
+        use_default_colors();
+        init_pair(1, COLOR_BLUE, -1);
+    }
+
     for (x = COLS - 1; ; --x) {
         if (LOGO == 1) {
             if (add_sl(x) == ERR) break;
@@ -109,7 +115,7 @@ int main(int argc, char *argv[])
         }
         getch();
         refresh();
-        usleep(40000);
+        usleep(50000);
     }
     mvcur(0, COLS - 1, LINES - 1, 0);
     endwin();
@@ -252,7 +258,7 @@ void add_man(int y, int x)
 
 
 void add_smoke(int y, int x)
-#define SMOKEPTNS        16
+#define SMOKEPTNS        5
 {
     static struct smokes {
         int y, x;
@@ -260,36 +266,90 @@ void add_smoke(int y, int x)
     } S[1000];
     static int sum = 0;
     static char *Smoke[2][SMOKEPTNS]
-        = {{"(   )", "(    )", "(    )", "(   )", "(  )",
-            "(  )" , "( )"   , "( )"   , "()"   , "()"  ,
-            "O"    , "O"     , "O"     , "O"    , "O"   ,
-            " "                                          },
-           {"(@@@)", "(@@@@)", "(@@@@)", "(@@@)", "(@@)",
-            "(@@)" , "(@)"   , "(@)"   , "@@"   , "@@"  ,
-            "@"    , "@"     , "@"     , "@"    , "@"   ,
-            " "                                          }};
+        = {{"(   )", "(    )", "(    )", "(   )", "     "},
+           {"(@@@)", "(@@@@)", "(@@@@)", "(@@@)", "     "}};
     static char *Eraser[SMOKEPTNS]
-        =  {"     ", "      ", "      ", "     ", "    ",
-            "    " , "   "   , "   "   , "  "   , "  "  ,
-            " "    , " "     , " "     , " "    , " "   ,
-            " "                                          };
-    static int dy[SMOKEPTNS] = { 2,  1, 1, 1, 0, 0, 0, 0, 0, 0,
-                                 0,  0, 0, 0, 0, 0             };
-    static int dx[SMOKEPTNS] = {-2, -1, 0, 1, 1, 1, 1, 1, 2, 2,
-                                 2,  2, 2, 3, 3, 3             };
+        =  {"     ", "      ", "      ", "     ", "     "};
+    static int dy[SMOKEPTNS] = { 2,  1, 1, 1, 0 };
+    static int dx[SMOKEPTNS] = {-2, -1, 0, 1, 0 };
+    static int prev_top_y = -1, prev_start = 0, prev_end = 0;
     int i;
 
     if (x % 4 == 0) {
         for (i = 0; i < sum; ++i) {
-            my_mvaddstr(S[i].y, S[i].x, Eraser[S[i].ptrn]);
-            S[i].y    -= dy[S[i].ptrn];
-            S[i].x    += dx[S[i].ptrn];
-            S[i].ptrn += (S[i].ptrn < SMOKEPTNS - 1) ? 1 : 0;
-            my_mvaddstr(S[i].y, S[i].x, Smoke[S[i].kind][S[i].ptrn]);
+            if (S[i].ptrn < SMOKEPTNS) {
+                my_mvaddstr(S[i].y, S[i].x, Eraser[S[i].ptrn]);
+                S[i].y    -= dy[S[i].ptrn];
+                S[i].x    += dx[S[i].ptrn];
+                S[i].ptrn++;
+                if (S[i].ptrn < SMOKEPTNS - 1) {
+                    my_mvaddstr(S[i].y, S[i].x, Smoke[S[i].kind][S[i].ptrn]);
+                }
+            }
         }
-        my_mvaddstr(y, x, Smoke[sum % 2][0]);
-        S[sum].y = y;    S[sum].x = x;
-        S[sum].ptrn = 0; S[sum].kind = sum % 2;
-        sum ++;
+        if (sum < 1000) {
+            my_mvaddstr(y, x, Smoke[sum % 2][0]);
+            S[sum].y = y;    S[sum].x = x;
+            S[sum].ptrn = 0; S[sum].kind = sum % 2;
+            sum ++;
+        }
+    }
+
+    int funnel = D51FUNNEL;
+    int length = D51LENGTH;
+    if (LOGO == 1) {
+        funnel = LOGOFUNNEL;
+        length = LOGOLENGTH;
+    } else if (C51 == 1) {
+        funnel = C51FUNNEL;
+        length = C51LENGTH;
+    }
+
+    int train_x = x - funnel;
+    int top_y = y - 5;
+    int start_x = train_x + funnel + 8;
+    int end_x = train_x + length;
+
+    if (prev_top_y != -1) {
+        if (prev_top_y != top_y) {
+            for (i = prev_start; i < prev_end; ++i) {
+                if (i >= 0 && i < COLS && prev_top_y >= 0 && prev_top_y < LINES) {
+                    mvaddch(prev_top_y, i, ' ');
+                }
+            }
+        } else {
+            for (i = end_x; i < prev_end; ++i) {
+                if (i >= 0 && i < COLS && top_y >= 0 && top_y < LINES) {
+                    mvaddch(top_y, i, ' ');
+                }
+            }
+            for (i = prev_start; i < start_x; ++i) {
+                if (i >= 0 && i < COLS && top_y >= 0 && top_y < LINES) {
+                    mvaddch(top_y, i, ' ');
+                }
+            }
+        }
+    }
+
+    if (sum >= 4) {
+        static char phrase[] = "I think I can, ";
+        int phrase_len = 15;
+        if (has_colors()) {
+            attron(COLOR_PAIR(1) | A_BOLD);
+        }
+        for (i = start_x; i < end_x; ++i) {
+            if (i >= 0 && i < COLS && top_y >= 0 && top_y < LINES) {
+                int idx = (i - start_x) % phrase_len;
+                mvaddch(top_y, i, phrase[idx]);
+            }
+        }
+        if (has_colors()) {
+            attroff(COLOR_PAIR(1) | A_BOLD);
+        }
+        prev_top_y = top_y;
+        prev_start = start_x;
+        prev_end = end_x;
+    } else {
+        prev_top_y = -1;
     }
 }
